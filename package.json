@@ -35,7 +35,7 @@
   "scripts": {
     "start": "node src/cli.ts",
     "check": "tsc -p .",
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.ts\"",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/trace-template.html dist/ && chmod +x dist/cli.js",
     "prepublishOnly": "npm run check && npm test && npm run build"
   },
