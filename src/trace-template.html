@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MOO trace</title>
+<style>
+  :root { --bg:#0f1115; --fg:#d7dae0; --dim:#7d8590; --card:#171a21; --line:#2a2f3a;
+          --llm:#6ea8fe; --tool:#5fd38d; --err:#ff6b6b; --verify:#f2c94c; --turn:#9b8cff; --cp:#ff9f43; --other:#8892a6; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#fafafa; --fg:#1f2328; --dim:#6a737d; --card:#fff; --line:#d8dee4; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--bg); color:var(--fg); }
+  header { padding:16px 24px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 8px; font-size:16px; }
+  .stats { display:flex; gap:24px; flex-wrap:wrap; color:var(--dim); }
+  .stats b { color:var(--fg); font-size:15px; display:block; }
+  main { padding:16px 24px; }
+  .legend { display:flex; gap:14px; margin:0 0 12px; color:var(--dim); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; }
+  .lane { display:flex; align-items:center; margin:3px 0; }
+  .lane .name { width:130px; flex:none; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .track { position:relative; flex:1; height:20px; background:var(--card); border:1px solid var(--line); border-radius:3px; }
+  .bar { position:absolute; top:2px; height:14px; min-width:2px; border-radius:2px; cursor:pointer; opacity:.9; }
+  .bar:hover { opacity:1; outline:1px solid var(--fg); }
+  .bar.llm { background:var(--llm); } .bar.tool { background:var(--tool); } .bar.verify { background:var(--verify); }
+  .bar.turn { background:var(--turn); } .bar.compact,.bar.plan,.bar.subagent { background:var(--other); }
+  .bar.error { background:var(--err); }
+  .mark { position:absolute; top:0; width:2px; height:100%; background:var(--cp); }
+  #detail { margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:4px; min-height:60px; white-space:pre-wrap; word-break:break-word; }
+  #detail .k { color:var(--dim); }
+  table { width:100%; border-collapse:collapse; }
+  td,th { padding:4px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:normal; }
+  tr.row { cursor:pointer; } tr.row:hover { background:var(--card); }
+  .err { color:var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>MOO execution trace</h1>
+  <div class="stats" id="stats"></div>
+</header>
+<main>
+  <div class="legend">
+    <span><i style="background:var(--turn)"></i>turn</span>
+    <span><i style="background:var(--llm)"></i>LLM call</span>
+    <span><i style="background:var(--tool)"></i>tool</span>
+    <span><i style="background:var(--verify)"></i>verify</span>
+    <span><i style="background:var(--err)"></i>error</span>
+    <span><i style="background:var(--cp)"></i>checkpoint</span>
+  </div>
+  <div id="lanes"></div>
+  <div id="detail"><span class="k">Click a bar or a row to inspect it.</span></div>
+  <table id="rows"><thead><tr><th>+time</th><th>agent</th><th>type</th><th>what</th><th>dur</th></tr></thead><tbody></tbody></table>
+</main>
+<script>
+const DATA = __DATA__;
+const ev = DATA.events.slice().sort((a, b) => a.ts - b.ts);
+const t0 = ev.length ? ev[0].ts : 0;
+const t1 = ev.reduce((m, e) => Math.max(m, e.ts + (e.dur || 0)), t0);
+const span = Math.max(1, t1 - t0);
+const fmt = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(ms < 10000 ? 2 : 1) + 's';
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const label = (e) => e.type === 'tool' ? e.name + '(' + (e.desc || '') + ')'
+  : e.type === 'llm' ? (e.model || 'llm') + '  in=' + (e.input || 0) + ' out=' + (e.output || 0)
+  : e.type === 'turn' ? e.prompt || ''
+  : e.type === 'verify' ? e.cmd + '  exit=' + e.code
+  : e.type === 'checkpoint' ? '#' + e.n + ' ' + (e.label || '')
+  : (e.label || e.detail || e.type);
+
+const s = DATA.stats;
+document.getElementById('stats').innerHTML = [
+  ['wall', fmt(span)], ['turns', s.turns], ['LLM calls', s.llmCalls],
+  ['tool calls', s.toolCalls + (s.toolErrors ? ' (' + s.toolErrors + ' failed)' : '')],
+  ['tokens in', s.inputTokens], ['tokens out', s.outputTokens],
+].map(([k, v]) => '<div><b>' + v + '</b>' + k + '</div>').join('');
+
+function show(e) {
+  const rows = Object.entries(e).map(([k, v]) => '<span class="k">' + k + ':</span> ' + esc(typeof v === 'string' ? v : JSON.stringify(v))).join('\n');
+  document.getElementById('detail').innerHTML = rows;
+}
+
+const agents = [];
+ev.forEach((e) => { if (!agents.includes(e.agent)) agents.push(e.agent); });
+const lanes = document.getElementById('lanes');
+agents.forEach((a) => {
+  const lane = document.createElement('div'); lane.className = 'lane';
+  lane.innerHTML = '<div class="name" title="' + esc(a) + '">' + esc(a) + '</div><div class="track"></div>';
+  const track = lane.querySelector('.track');
+  ev.filter((e) => e.agent === a).forEach((e) => {
+    const left = ((e.ts - t0) / span) * 100;
+    if (e.type === 'checkpoint') {
+      const m = document.createElement('div'); m.className = 'mark'; m.style.left = left + '%';
+      m.title = label(e); m.onclick = () => show(e); track.appendChild(m); return;
+    }
+    const b = document.createElement('div');
+    b.className = 'bar ' + e.type + (e.error ? ' error' : '');
+    b.style.left = left + '%'; b.style.width = Math.max(0.15, ((e.dur || 0) / span) * 100) + '%';
+    if (e.type === 'llm' || e.type === 'tool') b.style.top = e.type === 'llm' ? '2px' : '4px';
+    b.title = e.type + ': ' + label(e) + ' (' + fmt(e.dur || 0) + ')';
+    b.onclick = () => show(e); track.appendChild(b);
+  });
+  lanes.appendChild(lane);
+});
+
+const tbody = document.querySelector('#rows tbody');
+ev.forEach((e) => {
+  const tr = document.createElement('tr'); tr.className = 'row';
+  tr.innerHTML = '<td>+' + fmt(e.ts - t0) + '</td><td>' + esc(e.agent) + '</td><td>' + e.type + '</td><td class="' + (e.error ? 'err' : '') + '">' + esc(label(e).slice(0, 160)) + '</td><td>' + (e.dur != null ? fmt(e.dur) : '') + '</td>';
+  tr.onclick = () => { show(e); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>

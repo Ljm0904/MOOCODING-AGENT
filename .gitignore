@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.moo/
+*.log
+.DS_Store
+*.tgz

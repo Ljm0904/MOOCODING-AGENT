@@ -1,0 +1,38 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [22, 24]   # tests run TypeScript directly via Node's type stripping (>= 22.18)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ matrix.node }}", cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  package:
+    # The published artifact is compiled JS: make sure it installs and runs on the oldest supported Node.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack --pack-destination "$RUNNER_TEMP"
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install tarball and smoke-test on Node 20
+        run: |
+          mkdir "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app" && npm init -y >/dev/null
+          npm i "$RUNNER_TEMP"/moo-agent-*.tgz
+          npx moo --help

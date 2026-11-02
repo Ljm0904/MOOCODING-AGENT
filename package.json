@@ -1,0 +1,49 @@
+{
+  "name": "moo-agent",
+  "version": "0.1.0",
+  "description": "MOO — a terminal coding agent: multi-provider, MCP, checkpoints & rewind, worktree-parallel sub-agents, plan→verify loop, execution traces",
+  "keywords": [
+    "coding-agent",
+    "ai",
+    "cli",
+    "llm",
+    "mcp",
+    "claude",
+    "agent",
+    "developer-tools"
+  ],
+  "author": "Ljm0904",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ljm0904/MOOCODING-AGENT.git"
+  },
+  "homepage": "https://github.com/Ljm0904/MOOCODING-AGENT#readme",
+  "bugs": {
+    "url": "https://github.com/Ljm0904/MOOCODING-AGENT/issues"
+  },
+  "type": "module",
+  "bin": {
+    "moo": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "start": "node src/cli.ts",
+    "check": "tsc -p .",
+    "test": "node --test test/",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/trace-template.html dist/ && chmod +x dist/cli.js",
+    "prepublishOnly": "npm run check && npm test && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
